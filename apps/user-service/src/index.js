@@ -1,14 +1,28 @@
 const express = require('express');
 const Redis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
+const winston = require('winston');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// TODO: Implement structured JSON logging (e.g., winston, pino)
-// All logs should include: timestamp, level, message, and relevant context
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(winston.format.timestamp(), winston.format.json()),
+  transports: [new winston.transports.Console()]
+});
 
-// Redis connection
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
+const httpRequestDuration = new client.Histogram({
+  name: 'http_request_duration_ms',
+  help: 'HTTP request duration in ms',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [50, 100, 200, 300, 500, 1000, 2000, 5000],
+  registers: [register]
+});
+
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
@@ -16,14 +30,27 @@ const redis = new Redis({
   lazyConnect: true
 });
 
-redis.on('connect', () => console.log('Connected to Redis'));
-redis.on('error', (err) => console.error('Redis error:', err.message));
+redis.on('connect', () => logger.info('Connected to Redis'));
+redis.on('error', (err) => logger.error('Redis error', { error: err.message }));
 
 app.use(express.json());
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on('finish', () => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    const route = req.route?.path || req.path;
+    logger.info('request', {
+      method: req.method,
+      path: req.path,
+      route,
+      statusCode: res.statusCode,
+      durationMs
+    });
+    httpRequestDuration.labels(req.method, route, String(res.statusCode)).observe(durationMs);
+  });
+  next();
+});
 
-// TODO: Add request logging middleware
-
-// Health check endpoints
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'user-service', timestamp: new Date().toISOString() });
 });
@@ -44,11 +71,13 @@ app.get('/health/ready', async (req, res) => {
   }
 });
 
-// TODO: Add /metrics endpoint for Prometheus
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
 
 const USERS_KEY = 'users';
 
-// Initialize sample data
 const initializeData = async () => {
   try {
     await redis.connect();
@@ -60,26 +89,24 @@ const initializeData = async () => {
         { id: uuidv4(), name: 'Bob Wilson', email: 'bob@example.com', role: 'user', createdAt: new Date().toISOString() }
       ];
       await redis.set(USERS_KEY, JSON.stringify(sampleUsers));
-      console.log('Sample data initialized');
+      logger.info('Sample data initialized');
     }
   } catch (error) {
-    console.warn('Could not initialize Redis data:', error.message);
+    logger.warn('Could not initialize Redis data', { error: error.message });
   }
 };
 
-// Get all users
 app.get('/users', async (req, res) => {
   try {
     const data = await redis.get(USERS_KEY);
     const users = data ? JSON.parse(data) : [];
     res.json({ data: users, total: users.length });
   } catch (error) {
-    console.error('Failed to get users:', error.message);
+    logger.error('Failed to get users', { error: error.message });
     res.status(500).json({ error: 'Failed to retrieve users' });
   }
 });
 
-// Get user by ID
 app.get('/users/:id', async (req, res) => {
   try {
     const data = await redis.get(USERS_KEY);
@@ -92,12 +119,11 @@ app.get('/users/:id', async (req, res) => {
 
     res.json(user);
   } catch (error) {
-    console.error('Failed to get user:', error.message);
+    logger.error('Failed to get user', { error: error.message });
     res.status(500).json({ error: 'Failed to retrieve user' });
   }
 });
 
-// Create user
 app.post('/users', async (req, res) => {
   try {
     const { name, email, role } = req.body;
@@ -109,7 +135,6 @@ app.post('/users', async (req, res) => {
     const data = await redis.get(USERS_KEY);
     const users = data ? JSON.parse(data) : [];
 
-    // Check for duplicate email
     if (users.find(u => u.email === email)) {
       return res.status(409).json({ error: 'Email already exists' });
     }
@@ -125,15 +150,14 @@ app.post('/users', async (req, res) => {
     users.push(newUser);
     await redis.set(USERS_KEY, JSON.stringify(users));
 
-    console.log('User created:', newUser.id);
+    logger.info('User created', { userId: newUser.id });
     res.status(201).json(newUser);
   } catch (error) {
-    console.error('Failed to create user:', error.message);
+    logger.error('Failed to create user', { error: error.message });
     res.status(500).json({ error: 'Failed to create user' });
   }
 });
 
-// Delete user
 app.delete('/users/:id', async (req, res) => {
   try {
     const data = await redis.get(USERS_KEY);
@@ -147,33 +171,58 @@ app.delete('/users/:id', async (req, res) => {
     users.splice(index, 1);
     await redis.set(USERS_KEY, JSON.stringify(users));
 
-    console.log('User deleted:', req.params.id);
+    logger.info('User deleted', { userId: req.params.id });
     res.status(204).send();
   } catch (error) {
-    console.error('Failed to delete user:', error.message);
+    logger.error('Failed to delete user', { error: error.message });
     res.status(500).json({ error: 'Failed to delete user' });
   }
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// Error handler
 app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.message);
+  logger.error('Unhandled error', { error: err.message });
   res.status(500).json({ error: 'Internal server error' });
 });
-
-// TODO: Implement graceful shutdown
-// Handle SIGTERM/SIGINT: close server, disconnect Redis, exit cleanly
 
 const start = async () => {
   await initializeData();
   const server = app.listen(PORT, () => {
-    console.log(`User Service started on port ${PORT}`);
+    logger.info('User Service started', { port: PORT });
   });
+
+  const shutdown = async (signal) => {
+    logger.info('Shutting down', { signal });
+    server.close(async (err) => {
+      if (err) {
+        logger.error('Error closing server', { error: err.message });
+        process.exit(1);
+      }
+      try {
+        await redis.quit();
+      } catch (closeError) {
+        logger.error('Error closing Redis', { error: closeError.message });
+      } finally {
+        process.exit(0);
+      }
+    });
+
+    setTimeout(() => {
+      logger.error('Forced shutdown after timeout');
+      try {
+        redis.disconnect();
+      } catch (closeError) {
+        logger.error('Error disconnecting Redis', { error: closeError.message });
+      }
+      process.exit(1);
+    }, 10000);
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
   return server;
 };
 

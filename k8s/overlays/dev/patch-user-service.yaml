@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: user-service
+          image: devops-challenge/user-service:local
+          imagePullPolicy: IfNotPresent
