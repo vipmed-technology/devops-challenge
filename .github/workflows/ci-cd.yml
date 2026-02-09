@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - develop
+      - solution/luisDanielRodriguezAlza
 
 env:
   REGISTRY: ghcr.io
