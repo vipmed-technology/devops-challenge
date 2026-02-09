@@ -32,7 +32,7 @@ tmp/
 temp/
 
 # Kubernetes secrets (local)
-*-secret.yaml
+secret.local.yaml
 secrets/
 
 # Terraform

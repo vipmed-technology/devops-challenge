@@ -1,0 +1,34 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: devops-challenge
+
+bases:
+  - ../../base
+
+namePrefix: prod-
+
+commonLabels:
+  environment: prod
+
+# Production-specific patches
+patchesStrategicMerge:
+  - replica-patch.yaml
+  - pdb-patch.yaml
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - NODE_ENV=production
+      - LOG_LEVEL=info
+
+images:
+  - name: devops-challenge/api-gateway
+    newTag: prod
+  - name: devops-challenge/user-service
+    newTag: prod
+
+# Additional production resources
+resources:
+  - pod-disruption-budget.yaml

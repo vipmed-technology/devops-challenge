@@ -1,68 +1,207 @@
-# Monitoring Strategy
+# Monitoring & Observability Strategy
 
-> **Note to Candidate:** Document your monitoring and observability approach here.
+## Overview
 
-## Metrics
+This document outlines the monitoring strategy for the microservices application, covering metrics collection, logging, and alerting.
 
-### Application Metrics
+---
 
-List the metrics you would collect from the applications:
+## 1. Metrics Collection (Prometheus)
 
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| | | |
-| | | |
-| | | |
+### Implementation
+Both services expose Prometheus metrics at the `/metrics` endpoint using the `prom-client` library.
 
-### Infrastructure Metrics
+### Metrics Collected
 
-| Metric Name | Source | Description |
-|-------------|--------|-------------|
-| | | |
-| | | |
+**Default Metrics:**
+- Process CPU and memory usage
+- Node.js event loop lag
+- Garbage collection statistics
 
-## Logging
+**Custom Application Metrics:**
+
+*API Gateway:*
+- `http_requests_total` - Total HTTP requests (by method, route, status)
+- `http_request_duration_seconds` - Request latency histogram
+- `upstream_request_duration_seconds` - User service call latency
+
+*User Service:*
+- `http_requests_total` - Total HTTP requests
+- `http_request_duration_seconds` - Request latency histogram
+- `redis_operation_duration_seconds` - Redis operation latency
+- `user_operations_total` - User CRUD operations (by type and status)
+
+### Deployment Options
+
+**Option A: In-Cluster (Recommended for this project)**
+```bash
+# Install Prometheus + Grafana with Helm
+helm install prometheus prometheus-community/kube-prometheus-stack \
+  --namespace monitoring --create-namespace
+```
+
+**Option B: Managed Service**
+- Datadog, New Relic, Grafana Cloud
+- Lower operational overhead
+- Higher cost
+
+---
+
+## 2. Logging Strategy
+
+### Implementation
+Structured JSON logging using Winston library.
 
 ### Log Format
-
-Describe the structured logging format you implemented:
-
 ```json
-{}
+{
+  "timestamp": "2026-02-09T10:30:00.000Z",
+  "level": "info",
+  "service": "api-gateway",
+  "message": "HTTP request",
+  "method": "GET",
+  "path": "/api/users",
+  "statusCode": 200,
+  "duration": "0.045s"
+}
 ```
 
-### Log Aggregation Strategy
+### Log Levels
+- **Production:** `info` (errors, warnings, important events)
+- **Development:** `debug` (all events including debug info)
 
-How would you aggregate logs in production? Explain your choice.
+### Log Aggregation
+- **Current:** Logs to stdout (captured by Kubernetes)
+- **Recommended:** Grafana Loki or ELK stack for centralized logging
 
-## Alerting Rules
+---
 
-Define at least 3 alerting rules using Prometheus format:
+## 3. Health Checks
 
-### Alert 1:
+Each service exposes three health endpoints:
 
+- `/health` - Basic health status
+- `/health/live` - Liveness probe (is the process running?)
+- `/health/ready` - Readiness probe (can it handle traffic?)
+
+Kubernetes uses these for:
+- **Liveness:** Restart unhealthy pods
+- **Readiness:** Remove unhealthy pods from load balancing
+
+---
+
+## 4. Alerting Rules
+
+### Critical Alerts (Page Immediately)
+
+**1. Service Down**
 ```yaml
-# Prometheus alerting rule
+alert: ServiceDown
+expr: up{job="devops-challenge"} == 0
+for: 1m
+severity: critical
+description: "{{ $labels.service }} is down"
 ```
+**Impact:** Service unavailable to users  
+**Action:** Check pod status, logs, and recent deployments
 
-### Alert 2:
-
+**2. High Error Rate**
 ```yaml
+alert: HighErrorRate
+expr: |
+  rate(http_requests_total{status_code=~"5.."}[5m]) 
+  / rate(http_requests_total[5m]) > 0.05
+for: 5m
+severity: critical
+description: "Error rate above 5% for {{ $labels.service }}"
 ```
+**Impact:** Users experiencing errors  
+**Action:** Check application logs, verify dependencies
 
-### Alert 3:
-
+**3. Redis Connection Failure**
 ```yaml
+alert: RedisDown
+expr: up{job="redis"} == 0
+for: 2m
+severity: critical
+description: "Redis is unreachable"
 ```
+**Impact:** User service cannot read/write data  
+**Action:** Check Redis pod status and network connectivity
 
-## Dashboards
+### Warning Alerts (Investigate During Business Hours)
 
-If you created a Grafana dashboard, describe the panels and what they show:
+**4. High Latency**
+```yaml
+alert: HighLatency
+expr: |
+  histogram_quantile(0.95, 
+    rate(http_request_duration_seconds_bucket[5m])
+  ) > 2
+for: 10m
+severity: warning
+description: "P95 latency above 2s for {{ $labels.service }}"
+```
+**Impact:** Slow user experience  
+**Action:** Check resource usage, database performance
 
-1.
-2.
-3.
+**5. High Memory Usage**
+```yaml
+alert: HighMemoryUsage
+expr: |
+  container_memory_usage_bytes{pod=~".*gateway.*|.*service.*"} 
+  / container_spec_memory_limit_bytes > 0.85
+for: 15m
+severity: warning
+description: "{{ $labels.pod }} using >85% memory"
+```
+**Impact:** Risk of OOMKilled pods  
+**Action:** Review memory limits, check for memory leaks
 
-## Distributed Tracing (Bonus)
+**6. Pod Restart Loop**
+```yaml
+alert: PodRestartLoop
+expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+for: 5m
+severity: warning
+description: "{{ $labels.pod }} is restarting frequently"
+```
+**Impact:** Service instability  
+**Action:** Check pod logs, review liveness probe configuration
 
-If you implemented tracing, describe your approach.
+---
+
+## 5. Dashboards
+
+### Recommended Grafana Dashboards
+
+**Service Overview:**
+- Request rate (req/sec)
+- Error rate (%)
+- P50, P95, P99 latency
+- Active pods and their status
+
+**Infrastructure:**
+- CPU usage per pod
+- Memory usage per pod
+- Network I/O
+- Pod restarts
+
+**Business Metrics:**
+- User operations per minute
+- Total users
+- API endpoint usage
+
+---
+
+## Next Steps
+
+1. Deploy Prometheus and Grafana to the cluster
+2. Configure ServiceMonitor for automatic scraping
+3. Import recommended Grafana dashboards
+4. Set up AlertManager with notification channels
+5. Configure log aggregation (Loki recommended)
+
+---
+
+**Note:** This strategy provides production-ready observability. Start with in-cluster Prometheus for cost-effectiveness, then consider managed services as the application scales.

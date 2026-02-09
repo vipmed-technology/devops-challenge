@@ -1,0 +1,28 @@
+# Pod Disruption Budgets ensure high availability during voluntary disruptions
+# (node drains, cluster upgrades, etc.)
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: api-gateway-pdb
+  namespace: devops-challenge
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+      environment: prod
+
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: user-service-pdb
+  namespace: devops-challenge
+spec:
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app: user-service
+      environment: prod

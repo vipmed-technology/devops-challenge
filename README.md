@@ -30,17 +30,17 @@ A simple microservices application consisting of:
 
 Create production-ready Docker images for each service.
 
-- [ ] Write optimized Dockerfiles with multi-stage builds
-- [ ] Use minimal, secure base images (non-root user)
-- [ ] Create `.dockerignore` files to exclude unnecessary files
-- [ ] Keep final images under 200MB
-- [ ] Implement graceful shutdown handling (SIGTERM)
+- [x] Write optimized Dockerfiles with multi-stage builds
+- [x] Use minimal, secure base images (non-root user)
+- [x] Create `.dockerignore` files to exclude unnecessary files
+- [x] Keep final images under 200MB
+- [x] Implement graceful shutdown handling (SIGTERM)
 
 **Deliverables:**
-- `apps/api-gateway/Dockerfile`
-- `apps/api-gateway/.dockerignore`
-- `apps/user-service/Dockerfile`
-- `apps/user-service/.dockerignore`
+- ✅ `apps/api-gateway/Dockerfile`
+- ✅ `apps/api-gateway/.dockerignore`
+- ✅ `apps/user-service/Dockerfile`
+- ✅ `apps/user-service/.dockerignore`
 
 ---
 
@@ -48,25 +48,25 @@ Create production-ready Docker images for each service.
 
 Deploy the application to Kubernetes using Kustomize.
 
-- [ ] Create manifests: Deployments, Services, ConfigMaps, Secrets
-- [ ] Manage environment configuration properly:
+- [x] Create manifests: Deployments, Services, ConfigMaps, Secrets
+- [x] Manage environment configuration properly:
   - Use ConfigMaps for non-sensitive config (ports, URLs, log levels)
   - Use Secrets for sensitive data (passwords, API keys)
   - **Never hardcode secrets in manifests or code**
   - Explain how you would manage secrets in a real production environment
-- [ ] Implement health checks:
+- [x] Implement health checks:
   - Liveness probes (`/health/live`) - when to restart a container
   - Readiness probes (`/health/ready`) - when to send traffic
   - Configure appropriate thresholds and timeouts
-- [ ] Configure resource requests and limits
-- [ ] Set up Horizontal Pod Autoscaler (HPA)
-- [ ] Implement Network Policies to restrict pod-to-pod traffic
-- [ ] Create Kustomize overlays for `dev` and `prod` environments
+- [x] Configure resource requests and limits
+- [x] Set up Horizontal Pod Autoscaler (HPA)
+- [x] Implement Network Policies to restrict pod-to-pod traffic
+- [x] Create Kustomize overlays for `dev` and `prod` environments
 
 **Deliverables:**
-- `k8s/base/` - Base manifests with `kustomization.yaml`
-- `k8s/overlays/dev/` - Development overrides
-- `k8s/overlays/prod/` - Production overrides
+- ✅ `k8s/base/` - Base manifests with `kustomization.yaml`
+- ✅ `k8s/overlays/dev/` - Development overrides
+- ✅ `k8s/overlays/prod/` - Production overrides
 
 ---
 
@@ -74,24 +74,22 @@ Deploy the application to Kubernetes using Kustomize.
 
 Automate building, testing, and deploying the application.
 
-- [ ] Create a GitHub Actions workflow that:
+- [x] Create a GitHub Actions workflow that:
   - Builds and pushes Docker images on push
   - Runs linting and tests (`npm test`)
   - Deploys to Kubernetes based on branch:
     - `develop` -> dev environment
     - `main` -> prod environment
   - Sends a notification on deploy success/failure
-- [ ] Use proper secrets management (no hardcoded credentials)
-- [ ] Handle environment-specific variables (dev vs prod)
-- [ ] Implement image tagging strategy (not just `latest`)
+- [x] Use proper secrets management (no hardcoded credentials)
+- [x] Handle environment-specific variables (dev vs prod)
+- [x] Implement image tagging strategy (not just `latest`)
 
 **Registry Options (choose one):**
-- GitHub Container Registry (ghcr.io) - **Recommended, free**
-- Docker Hub
-- AWS ECR (if you have an account)
+- GitHub Container Registry (ghcr.io) - **Recommended, free** ✅ Selected
 
 **Deliverables:**
-- `.github/workflows/ci-cd.yml`
+- ✅ `.github/workflows/ci-cd.yml`
 
 ---
 
@@ -99,16 +97,15 @@ Automate building, testing, and deploying the application.
 
 Add observability to the application.
 
-- [ ] Add Prometheus metrics endpoint (`/metrics`) to both services
-- [ ] Implement structured JSON logging (replace `console.log`)
-- [ ] Create a monitoring setup:
-  - **Option A:** Deploy Prometheus + Grafana to the cluster
-  - **Option B:** Document a monitoring strategy with tool choices
-- [ ] Define at least 3 alerting rules (documentation only is fine)
+- [x] Add Prometheus metrics endpoint (`/metrics`) to both services
+- [x] Implement structured JSON logging (replace `console.log`)
+- [x] Create a monitoring setup:
+  - **Option B:** Document a monitoring strategy with tool choices ✅ Selected
+- [x] Define at least 3 alerting rules (documentation only is fine)
 
 **Deliverables:**
-- Updated application code with `/metrics` and structured logging
-- `docs/monitoring-strategy.md`
+- ✅ Updated application code with `/metrics` and structured logging
+- ✅ `docs/monitoring-strategy.md`
 
 ---
 
@@ -116,15 +113,15 @@ Add observability to the application.
 
 A broken deployment exists in `k8s/broken/`. These manifests were deployed to production and the application is not working.
 
-- [ ] Review the manifests in `k8s/broken/`
-- [ ] Identify **all issues** (there are at least 8)
-- [ ] Document each issue with:
+- [x] Review the manifests in `k8s/broken/`
+- [x] Identify **all issues** (there are at least 8) - Found 10 issues
+- [x] Document each issue with:
   - What is wrong
   - Why it causes a problem
   - How to fix it
 
 **Deliverables:**
-- `docs/troubleshooting.md`
+- ✅ `docs/troubleshooting.md`
 
 ---
 
@@ -227,8 +224,8 @@ curl http://localhost:3000/api/users
 - [ ] Implement canary or blue-green deployments
 - [ ] Add integration tests in the pipeline
 - [ ] Set up distributed tracing (OpenTelemetry)
-- [ ] Implement Pod Disruption Budgets
-- [ ] Add security scanning (Trivy, Snyk) in the pipeline
+- [x] Implement Pod Disruption Budgets ✅ Completed
+- [x] Add security scanning (Trivy, Snyk) in the pipeline ✅ Completed
 
 ---
 

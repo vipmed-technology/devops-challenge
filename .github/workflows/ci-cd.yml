@@ -1,0 +1,203 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ${{ github.repository }}
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, user-service]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: apps/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/${{ matrix.service }}
+        run: npm ci
+
+      - name: Run linter
+        working-directory: apps/${{ matrix.service }}
+        run: npm run lint
+
+      - name: Run tests
+        working-directory: apps/${{ matrix.service }}
+        run: npm test
+
+  build-and-push:
+    name: Build and Push Docker Images
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        service: [api-gateway, user-service]
+    
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/develop' }}
+            type=raw,value=prod,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: apps/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+  deploy:
+    name: Deploy to Kubernetes
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine environment
+        id: env
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            echo "environment=prod" >> $GITHUB_OUTPUT
+            echo "tag=prod" >> $GITHUB_OUTPUT
+          else
+            echo "environment=dev" >> $GITHUB_OUTPUT
+            echo "tag=dev" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Setup kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'latest'
+
+      - name: Configure kubectl
+        run: |
+          mkdir -p $HOME/.kube
+          echo "${{ secrets.KUBECONFIG }}" | base64 -d > $HOME/.kube/config
+          chmod 600 $HOME/.kube/config
+
+      - name: Setup Kustomize
+        uses: imranismail/setup-kustomize@v2
+        with:
+          kustomize-version: 'latest'
+
+      - name: Update image tags
+        working-directory: k8s/overlays/${{ steps.env.outputs.environment }}
+        run: |
+          kustomize edit set image \
+            devops-challenge/api-gateway=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/api-gateway:${{ steps.env.outputs.tag }} \
+            devops-challenge/user-service=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/user-service:${{ steps.env.outputs.tag }}
+
+      - name: Deploy to Kubernetes
+        working-directory: k8s/overlays/${{ steps.env.outputs.environment }}
+        run: |
+          kustomize build . | kubectl apply -f -
+          kubectl rollout status deployment/api-gateway -n devops-challenge --timeout=5m
+          kubectl rollout status deployment/user-service -n devops-challenge --timeout=5m
+
+      - name: Verify deployment
+        run: |
+          kubectl get pods -n devops-challenge
+          kubectl get services -n devops-challenge
+
+      - name: Send success notification
+        if: success()
+        run: |
+          echo "Deployment to ${{ steps.env.outputs.environment }} succeeded!"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Environment: ${{ steps.env.outputs.environment }}"
+          # In production, this would send to Slack, Discord, email, etc.
+          # Example: curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} -d '{"text":"Deployment succeeded"}'
+
+      - name: Send failure notification
+        if: failure()
+        run: |
+          echo "Deployment to ${{ steps.env.outputs.environment }} failed!"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "Commit: ${{ github.sha }}"
+          echo "Environment: ${{ steps.env.outputs.environment }}"
+          # In production, this would send to Slack, Discord, email, etc.
+          # Example: curl -X POST ${{ secrets.SLACK_WEBHOOK_URL }} -d '{"text":"Deployment failed"}'
+
+  security-scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push'
+    strategy:
+      matrix:
+        service: [api-gateway, user-service]
+    
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.service }}:${{ github.ref == 'refs/heads/main' && 'prod' || 'dev' }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
