@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: devops-challenge
+  labels:
+    app: user-service
+data:
+  # Application configuration
+  PORT: "3001"
+  REDIS_HOST: "redis"
+  REDIS_PORT: "6379"
+  LOG_LEVEL: "info"
+  NODE_ENV: "production"

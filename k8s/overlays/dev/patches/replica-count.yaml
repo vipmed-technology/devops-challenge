@@ -1,0 +1,16 @@
+# Reduce replica counts for dev environment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: devops-challenge
+spec:
+  replicas: 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+  namespace: devops-challenge
+spec:
+  replicas: 1

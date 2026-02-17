@@ -1,0 +1,41 @@
+# Dependencies (will be installed fresh in container)
+node_modules
+npm-debug.log
+# Note: package-lock.json is REQUIRED for npm ci (deterministic builds)
+
+# Git
+.git
+.gitignore
+
+# Environment and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# Testing
+*.test.js
+coverage
+.nyc_output
+
+# Development
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Documentation
+*.md
+README.md
+
+# CI/CD
+.github
+
+# Logs
+logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db

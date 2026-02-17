@@ -1,0 +1,16 @@
+# Dev-specific configuration overrides
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: api-gateway-config
+  namespace: devops-challenge
+data:
+  LOG_LEVEL: "debug"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: user-service-config
+  namespace: devops-challenge
+data:
+  LOG_LEVEL: "debug"
