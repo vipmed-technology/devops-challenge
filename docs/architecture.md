@@ -4,19 +4,21 @@
 
 This is a small application with three main pieces:
 
-- `api-gateway` exposes public HTTP endpoints on port `3000`
-- `user-service` handles user CRUD on port `3001`
-- `redis` stores user data on port `6379`
+- `api-gateway` is the entry point on port `3000`
+- `user-service` handles user operations on port `3001`
+- `redis` stores the user data on port `6379`
 
-Traffic flow:
+The flow is simple: requests come into the gateway, the gateway forwards user operations to the user service, and the user service reads or writes data in Redis.
 
-1. Client requests hit `api-gateway`
-2. `api-gateway` proxies user operations to `user-service`
-3. `user-service` reads and writes user data in Redis
+I also added NetworkPolicies so the traffic path is explicit:
 
-NetworkPolicies restrict the intended east-west traffic path so only the gateway can call the user service and only the user service can talk to Redis.
+- clients hit `api-gateway`
+- `api-gateway` can reach `user-service`
+- `user-service` can reach `redis`
 
-## Your Decisions
+For this challenge, that felt like enough without adding more moving parts.
+
+## Main Decisions
 
 ### Docker
 
@@ -116,12 +118,13 @@ I decided to document the monitoring approach instead of installing a full Prome
 ## What I Would Improve With More Time
 
 1. Add PodDisruptionBudgets and anti-affinity rules
-2. Add Trivy image scanning and dependency scanning to CI
-3. Add OpenTelemetry traces between gateway and user service
+2. Add image and dependency scanning in CI
+3. Add OpenTelemetry traces between services and deploy a full Prometheus/Grafana stack instead of only documenting the monitoring approach
+4. Validate the full deployment in a live cluster and tune resources from real usage
 
 ## Time Spent
 
-Approximate effort for this implementation:
+Approximate effort:
 
 | Task | Time |
 |------|------|
