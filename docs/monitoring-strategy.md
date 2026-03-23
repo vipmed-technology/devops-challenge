@@ -2,32 +2,32 @@
 
 ## Metrics
 
-### Application Metrics
-
 Both services expose `/metrics` using `prom-client`.
+
+The main application metrics are:
 
 | Metric Name | Type | Description |
 |-------------|------|-------------|
-| `api_gateway_http_requests_total` | Counter | Count of gateway requests by method, route, and status |
+| `api_gateway_http_requests_total` | Counter | Total gateway requests by method, route, and status |
 | `api_gateway_http_request_duration_seconds` | Histogram | Gateway latency distribution |
-| `user_service_http_requests_total` | Counter | Count of user service requests by method, route, and status |
-| `user_service_http_request_duration_seconds` | Histogram | User service latency distribution |
-| `process_*`, `nodejs_*` | Mixed | Default Node.js process/runtime metrics |
+| `user_service_http_requests_total` | Counter | Total user-service requests by method, route, and status |
+| `user_service_http_request_duration_seconds` | Histogram | User-service latency distribution |
+| `process_*`, `nodejs_*` | Mixed | Default runtime and process metrics from Node.js |
 
-### Infrastructure Metrics
+For infrastructure-level visibility I would also scrape:
 
 | Metric Name | Source | Description |
 |-------------|--------|-------------|
-| `kube_deployment_status_replicas_available` | kube-state-metrics | Number of available replicas |
-| `container_cpu_usage_seconds_total` | cAdvisor/kubelet | CPU consumption per container |
-| `container_memory_working_set_bytes` | cAdvisor/kubelet | Memory pressure and working set |
+| `kube_deployment_status_replicas_available` | kube-state-metrics | Available replicas |
+| `container_cpu_usage_seconds_total` | cAdvisor/kubelet | CPU usage |
+| `container_memory_working_set_bytes` | cAdvisor/kubelet | Memory pressure |
 | `kube_pod_container_status_restarts_total` | kube-state-metrics | Restart spikes and crash loops |
 
 ## Logging
 
-### Log Format
+Application logs are structured JSON through Winston. I kept them simple and request-focused so they are easy to ingest into a central logging stack.
 
-Application logs are structured JSON via Winston.
+Example:
 
 ```json
 {
@@ -42,23 +42,19 @@ Application logs are structured JSON via Winston.
 }
 ```
 
-### Log Aggregation Strategy
+For production log aggregation, I would use:
 
-Recommended production stack:
+- Fluent Bit or Vector
+- Loki
+- Grafana
 
-- Fluent Bit or Vector as node-level log collector
-- Loki for storage and querying
-- Grafana for dashboards and log exploration
-
-Why:
-
-- It is lightweight for Kubernetes
-- It works well with structured JSON logs
-- It avoids the operational overhead of a larger Elasticsearch stack for a small service footprint
+I picked that stack because it is lightweight, works well with JSON logs, and feels like a good fit for a small Kubernetes-based service set.
 
 ## Alerting Rules
 
-### Alert 1: API Gateway High 5xx Rate
+These are the first alerts I would want in place.
+
+### API gateway high 5xx rate
 
 ```yaml
 - alert: ApiGatewayHigh5xxRate
@@ -74,7 +70,7 @@ Why:
     summary: API gateway 5xx rate is above 5%
 ```
 
-### Alert 2: User Service Has No Ready Replicas
+### User service has no ready replicas
 
 ```yaml
 - alert: UserServiceNoReadyReplicas
@@ -86,7 +82,7 @@ Why:
     summary: User service has no ready replicas
 ```
 
-### Alert 3: API Gateway P95 Latency High
+### API gateway p95 latency is high
 
 ```yaml
 - alert: ApiGatewayP95LatencyHigh
@@ -102,7 +98,7 @@ Why:
     summary: API gateway p95 latency is above 750ms
 ```
 
-### Alert 4: Redis Dependency Failing
+### User service restart spike
 
 ```yaml
 - alert: UserServiceRedisDependencyFailing
@@ -116,14 +112,14 @@ Why:
 
 ## Dashboards
 
-Minimum Grafana dashboards:
+At minimum I would build three dashboards:
 
-1. API traffic: request volume, 4xx/5xx split, p95 latency, pod count
-2. User service health: request volume, Redis dependency behavior, pod readiness
-3. Platform health: CPU, memory, restarts, HPA scaling decisions
+1. Gateway traffic, error rate, latency, and pod count
+2. User service traffic, readiness, and restart behavior
+3. Cluster resource usage for CPU, memory, and scaling activity
 
 ## Distributed Tracing
 
-Not implemented in this challenge.
+I did not implement tracing in this challenge.
 
-If I extended this further, I would add OpenTelemetry SDK instrumentation and export traces to Tempo or Jaeger so proxy latency between the gateway and user service becomes easier to debug.
+If I had more time, I would add OpenTelemetry instrumentation and export traces to Tempo or Jaeger so it is easier to follow a request from the gateway into the user service and separate app latency from dependency latency.

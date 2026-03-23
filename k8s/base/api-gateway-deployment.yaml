@@ -67,7 +67,7 @@ spec:
           readinessProbe:
             httpGet:
               # Este probe protege la ruta principal del negocio: si el
-              # gateway no puede hablar con user-service, no debe recibir tráfico.
+              # gateway no puede hablar con user-service, no debe recibir trafico.
               path: /health/ready
               port: http
             initialDelaySeconds: 5

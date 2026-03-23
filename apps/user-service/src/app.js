@@ -27,7 +27,7 @@ function createApp(store) {
   app.use(express.json());
 
   // Dejamos la observabilidad en el borde del servicio para capturar
-  // tanto requests exitosos como errores de validación o runtime.
+  // tanto requests exitosos como errores de validacion o runtime.
   app.use((req, res, next) => {
     const startedAt = process.hrtime.bigint();
 
@@ -69,8 +69,8 @@ function createApp(store) {
     res.json({ status: 'alive' });
   });
 
-  // Estar "vivo" no alcanza si Redis está caído; en ese caso el pod
-  // sigue arriba, pero no debería recibir tráfico.
+  // Estar "vivo" no alcanza si Redis esta caido; en ese caso el pod
+  // sigue arriba, pero no deberia recibir trafico.
   app.get('/health/ready', async (_req, res) => {
     try {
       await store.ping();

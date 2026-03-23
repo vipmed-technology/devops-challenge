@@ -27,7 +27,7 @@ spec:
             - name: http
               containerPort: 3001
           env:
-            # Redis password va por Secret; el resto es configuración normal.
+            # Redis password va por Secret; el resto es configuracion normal.
             - name: PORT
               valueFrom:
                 configMapKeyRef:
@@ -75,7 +75,7 @@ spec:
             failureThreshold: 3
           readinessProbe:
             httpGet:
-              # Readiness depende de Redis porque sin esa conexión el CRUD
+              # Readiness depende de Redis porque sin esa conexion el CRUD
               # no puede responder correctamente aunque el proceso siga vivo.
               path: /health/ready
               port: http

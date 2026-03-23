@@ -29,8 +29,8 @@ function createApp(options = {}) {
 
   app.use(express.json());
 
-  // Tomamos la métrica al cierre de la respuesta para registrar el status final
-  // y el tiempo real que terminó viendo el cliente.
+  // Tomamos la metrica al cierre de la respuesta para registrar el status final
+  // y el tiempo real que termino viendo el cliente.
   app.use((req, res, next) => {
     const startedAt = process.hrtime.bigint();
 
@@ -73,7 +73,7 @@ function createApp(options = {}) {
   });
 
   // Si el user-service no responde bien, preferimos marcar este pod como
-  // no listo para que Kubernetes deje de mandarle tráfico.
+  // no listo para que Kubernetes deje de mandarle trafico.
   app.get('/health/ready', async (_req, res) => {
     try {
       await httpClient.get(`${userServiceUrl}/health/ready`);

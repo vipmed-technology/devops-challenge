@@ -1,73 +1,75 @@
 # Troubleshooting Report
 
+While reviewing the manifests under `k8s/broken`, I focused on the kinds of issues that would explain a production deployment being "up" on paper but still not working correctly in practice.
+
 ## Issues Found
 
 ### Issue 1
 
 - File: `k8s/broken/api-gateway.yaml`
 - What is wrong: The Deployment selector expects `app: api-gateway`, but the pod template label is `app: gateway`.
-- Why it causes a problem: The Deployment will not manage matching pods correctly and the Service selector will not discover the gateway pods.
+- Why it causes a problem: The Deployment and Service both depend on labels matching correctly. With the wrong label, the pods are effectively invisible to the resources that are supposed to manage and route to them.
 - How to fix it: Change the pod template label to `app: api-gateway`.
 
 ### Issue 2
 
 - File: `k8s/broken/api-gateway.yaml`
-- What is wrong: The gateway container exposes port `8080`, but the application listens on `3000`.
-- Why it causes a problem: This creates a mismatch for documentation, debugging, and traffic wiring. It also makes the manifest internally inconsistent with probes and service routing.
-- How to fix it: Set `containerPort` to `3000` and preferably use a named port.
+- What is wrong: The gateway container exposes port `8080`, but the application itself listens on `3000`.
+- Why it causes a problem: Even when some of the traffic rules point at `3000`, the manifest is internally inconsistent and much harder to reason about during an incident.
+- How to fix it: Set `containerPort` to `3000` and use a named port consistently.
 
 ### Issue 3
 
 - File: `k8s/broken/api-gateway.yaml`
 - What is wrong: The API gateway memory limit is only `64Mi`.
-- Why it causes a problem: That limit is too low for a Node.js service under normal startup and runtime conditions, which can lead to OOM kills and instability in production.
-- How to fix it: Raise the memory limit to a realistic value such as `256Mi` or higher based on profiling.
+- Why it causes a problem: That is very low for a Node.js process in a real environment and can easily cause OOM kills or unstable behavior.
+- How to fix it: Increase the limit to something more realistic, for example `256Mi`, and then tune it from observed usage.
 
 ### Issue 4
 
 - File: `k8s/broken/user-service.yaml`
-- What is wrong: `REDIS_HOST` is set to `redis-master`, but the challenge context says Redis is reachable at `redis:6379`.
-- Why it causes a problem: The user service will fail to connect to Redis, causing readiness failures and broken CRUD behavior.
+- What is wrong: `REDIS_HOST` is set to `redis-master`, but the challenge context says Redis is available at `redis:6379`.
+- Why it causes a problem: The user service will try to connect to the wrong host, which breaks readiness and all user operations that depend on Redis.
 - How to fix it: Set `REDIS_HOST=redis`.
 
 ### Issue 5
 
 - File: `k8s/broken/user-service.yaml`
-- What is wrong: The user-service liveness probe hits `/health` with `failureThreshold: 1`.
-- Why it causes a problem: `/health` is usually better as a generic status endpoint, while liveness should use `/health/live`. A single transient failure would trigger an immediate restart, making the workload overly fragile.
-- How to fix it: Point liveness to `/health/live` and use a safer threshold such as `3`.
+- What is wrong: The liveness probe uses `/health` and has `failureThreshold: 1`.
+- Why it causes a problem: One brief failure is enough to restart the container, which is too aggressive for production. Also, liveness is better pointed at a dedicated `/health/live` endpoint.
+- How to fix it: Use `/health/live` for liveness and increase the failure threshold to something safer like `3`.
 
 ### Issue 6
 
 - File: `k8s/broken/user-service.yaml`
-- What is wrong: The Service forwards to `targetPort: 8080`, but the container listens on `3001`.
-- Why it causes a problem: Traffic sent to the Service never reaches the application process, so the gateway cannot call the user service successfully.
-- How to fix it: Change `targetPort` to `3001` or to a named container port.
+- What is wrong: The Service routes to `targetPort: 8080`, but the container listens on `3001`.
+- Why it causes a problem: The gateway may resolve the Service, but the traffic will be sent to the wrong port and fail.
+- How to fix it: Change `targetPort` to `3001` or reference a named port.
 
 ### Issue 7
 
 - File: `k8s/broken/redis.yaml`
-- What is wrong: Redis is started with `--requirepass supersecret`, but the application manifests do not pass Redis authentication into the user service.
-- Why it causes a problem: The user service tries unauthenticated connections and Redis rejects them, which breaks readiness and user CRUD operations.
-- How to fix it: Store the password in a Secret and inject `REDIS_PASSWORD` into both Redis and the user service.
+- What is wrong: Redis is started with `--requirepass supersecret`, but the user-service manifest is not configured to authenticate against Redis.
+- Why it causes a problem: The dependency is technically up, but the application still cannot use it, so the service remains broken.
+- How to fix it: Move the password into a Secret and inject `REDIS_PASSWORD` into both Redis and the user service.
 
 ### Issue 8
 
 - File: `k8s/broken/configmap.yaml`
 - What is wrong: `REDIS_PASSWORD` is stored in a ConfigMap.
-- Why it causes a problem: ConfigMaps are for non-sensitive configuration. Secrets in ConfigMaps are easy to expose accidentally and violate separation of concerns.
-- How to fix it: Move `REDIS_PASSWORD` into a Kubernetes Secret or, better, an external secret manager integration.
+- Why it causes a problem: ConfigMaps are not meant for sensitive data, so this mixes secrets with normal configuration and increases exposure risk.
+- How to fix it: Move `REDIS_PASSWORD` into a Kubernetes Secret or an external secrets solution.
 
 ### Issue 9
 
 - File: `k8s/broken/configmap.yaml`
-- What is wrong: `DATABASE_URL` with embedded credentials is stored in plaintext in the ConfigMap even though this application does not use PostgreSQL.
-- Why it causes a problem: It leaks credentials unnecessarily and introduces misleading dead configuration into production manifests.
-- How to fix it: Remove the unused variable entirely. If it becomes needed later, store it in a Secret instead.
+- What is wrong: `DATABASE_URL` with credentials is stored in plaintext even though this application does not use PostgreSQL.
+- Why it causes a problem: It exposes credentials unnecessarily and adds confusing dead config to the deployment.
+- How to fix it: Remove the variable. If it becomes necessary later, store it in a Secret.
 
 ### Issue 10
 
 - File: `k8s/broken/api-gateway.yaml` and `k8s/broken/user-service.yaml`
-- What is wrong: Both stateless services use the mutable `:latest` tag.
-- Why it causes a problem: Mutable tags make rollbacks and incident debugging much harder because the deployed image can change without a manifest change.
-- How to fix it: Use immutable tags, ideally the Git commit SHA generated by CI.
+- What is wrong: Both services use the mutable `:latest` image tag.
+- Why it causes a problem: It makes deployments harder to reproduce and roll back because the same manifest can point to different image contents over time.
+- How to fix it: Use immutable tags, ideally the commit SHA generated by CI.
