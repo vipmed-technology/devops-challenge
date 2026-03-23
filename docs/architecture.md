@@ -132,6 +132,6 @@ Approximate effort:
 | Part 2: Kubernetes | 3h |
 | Part 3: CI/CD | 1.5h |
 | Part 4: Monitoring | 1.5h |
-| Part 5: Troubleshooting | 1h |
+| Part 5: Troubleshooting | 1.5h |
 | Documentation | 1h |
-| Total | 9.5h |
+| Total | 10h |
