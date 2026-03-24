@@ -1,28 +1,83 @@
 const express = require('express');
 const Redis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
+const promClient = require('prom-client');
+const winston = require('winston');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 // TODO: Implement structured JSON logging (e.g., winston, pino)
 // All logs should include: timestamp, level, message, and relevant context
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'user-service' },
+  transports: [new winston.transports.Console()]
+});
+
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register, prefix: 'user_service_' });
+
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+const httpRequestDurationMs = new promClient.Histogram({
+  name: 'http_request_duration_ms',
+  help: 'HTTP request duration in ms',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2000]
+});
+
+register.registerMetric(httpRequestsTotal);
+register.registerMetric(httpRequestDurationMs);
 
 // Redis connection
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
-  port: parseInt(process.env.REDIS_PORT || '6379'),
+  port: parseInt(process.env.REDIS_PORT || '6379', 10),
+  password: process.env.REDIS_PASSWORD || undefined,
   maxRetriesPerRequest: 3,
   lazyConnect: true
 });
 
-redis.on('connect', () => console.log('Connected to Redis'));
-redis.on('error', (err) => console.error('Redis error:', err.message));
+redis.on('connect', () => logger.info({ message: 'redis_connected' }));
+redis.on('error', (err) => logger.error({ message: 'redis_error', error: err.message }));
 
 app.use(express.json());
 
 // TODO: Add request logging middleware
-
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const route = req.route?.path || req.path;
+    const labels = {
+      method: req.method,
+      route,
+      status_code: String(res.statusCode)
+    };
+    httpRequestsTotal.inc(labels);
+    httpRequestDurationMs.observe(labels, duration);
+    logger.info({
+      message: 'request_completed',
+      method: req.method,
+      path: req.originalUrl,
+      route,
+      statusCode: res.statusCode,
+      responseTimeMs: duration,
+      requestId: req.headers['x-request-id'] || null
+    });
+  });
+  next();
+});
 // Health check endpoints
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'user-service', timestamp: new Date().toISOString() });
@@ -45,6 +100,10 @@ app.get('/health/ready', async (req, res) => {
 });
 
 // TODO: Add /metrics endpoint for Prometheus
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
 
 const USERS_KEY = 'users';
 
@@ -169,13 +228,30 @@ app.use((err, req, res, next) => {
 // TODO: Implement graceful shutdown
 // Handle SIGTERM/SIGINT: close server, disconnect Redis, exit cleanly
 
+let server;
 const start = async () => {
   await initializeData();
-  const server = app.listen(PORT, () => {
-    console.log(`User Service started on port ${PORT}`);
-  });
-  return server;
+  server = app.listen(PORT, () => logger.info({ message: 'server_started', port: PORT }));
 };
+
+const shutdown = async (signal) => {
+  logger.info({ message: 'shutdown_started', signal });
+  if (server) {
+    server.close(async () => {
+      await redis.quit().catch(() => undefined);
+      logger.info({ message: 'shutdown_complete' });
+      process.exit(0);
+    });
+  } else {
+    await redis.quit().catch(() => undefined);
+    process.exit(0);
+  }
+
+  setTimeout(() => process.exit(1), 10000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 start();
 
