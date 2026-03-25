@@ -132,11 +132,15 @@ jobs:
           kubectl rollout status deployment/user-service -n devops-challenge-${DEPLOY_ENV} --timeout=180s
 
       - name: Notify on deploy result
-        if: always() && secrets.DEPLOY_WEBHOOK_URL != ''
+        if: always()
         env:
           DEPLOY_STATUS: ${{ job.status }}
           DEPLOY_WEBHOOK_URL: ${{ secrets.DEPLOY_WEBHOOK_URL }}
         run: |
+          if [ -z "$DEPLOY_WEBHOOK_URL" ]; then
+            echo "DEPLOY_WEBHOOK_URL is not set; skipping notification."
+            exit 0
+          fi
           curl -X POST "$DEPLOY_WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -d "{\"repository\":\"${GITHUB_REPOSITORY}\",\"environment\":\"${DEPLOY_ENV}\",\"status\":\"${DEPLOY_STATUS}\",\"sha\":\"${GITHUB_SHA}\"}"
