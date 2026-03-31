@@ -1,9 +1,41 @@
 const express = require('express');
 const axios = require('axios');
+const promClient = require('prom-client');
+const winston = require('winston');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: { service: 'api-gateway' },
+  transports: [new winston.transports.Console()]
+});
+
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register, prefix: 'api_gateway_' });
+
+const httpRequestsTotal = new promClient.Counter({
+  name: 'http_requests_total',
+  help: 'Total HTTP requests',
+  labelNames: ['method', 'route', 'status_code']
+});
+
+const httpRequestDurationMs = new promClient.Histogram({
+  name: 'http_request_duration_ms',
+  help: 'HTTP request duration in ms',
+  labelNames: ['method', 'route', 'status_code'],
+  buckets: [5, 10, 25, 50, 100, 250, 500, 1000, 2000]
+});
+
+register.registerMetric(httpRequestsTotal);
+register.registerMetric(httpRequestDurationMs);
 
 // TODO: Implement structured JSON logging (e.g., winston, pino)
 // All logs should include: timestamp, level, message, and request context
@@ -12,7 +44,32 @@ app.use(express.json());
 
 // TODO: Add request logging middleware
 // Should log: method, path, status code, response time in ms
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const route = req.route?.path || req.path;
+    const labels = {
+      method: req.method,
+      route,
+      status_code: String(res.statusCode)
+    };
 
+    httpRequestsTotal.inc(labels);
+    httpRequestDurationMs.observe(labels, duration);
+
+    logger.info({
+      message: 'request_completed',
+      method: req.method,
+      path: req.originalUrl,
+      route,
+      statusCode: res.statusCode,
+      responseTimeMs: duration,
+      requestId: req.headers['x-request-id'] || null
+    });
+  });
+  next();
+});
 // Health check endpoints
 app.get('/health', (req, res) => {
   res.json({ status: 'healthy', service: 'api-gateway', timestamp: new Date().toISOString() });
@@ -36,7 +93,10 @@ app.get('/health/ready', async (req, res) => {
 
 // TODO: Add /metrics endpoint for Prometheus
 // Hint: Use prom-client library to expose default and custom metrics
-
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.end(await register.metrics());
+});
 // Proxy to User Service
 app.get('/api/users', async (req, res) => {
   try {
@@ -103,7 +163,23 @@ app.use((err, req, res, next) => {
 // 4. Exit cleanly
 
 const server = app.listen(PORT, () => {
-  console.log(`API Gateway started on port ${PORT}`);
+  logger.info({ message: 'server_started', port: PORT });
 });
+
+const shutdown = async (signal) => {
+  logger.info({ message: 'shutdown_started', signal });
+  server.close(() => {
+    logger.info({ message: 'http_server_closed' });
+    process.exit(0);
+  });
+
+  setTimeout(() => {
+    logger.error({ message: 'forced_shutdown_timeout' });
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 module.exports = { app, server };
