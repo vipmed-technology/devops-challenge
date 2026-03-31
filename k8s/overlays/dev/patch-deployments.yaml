@@ -1,0 +1,27 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: api-gateway
+          env:
+            - name: LOG_LEVEL
+              value: debug
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: user-service
+spec:
+  replicas: 1
+  template:
+    spec:
+      containers:
+        - name: user-service
+          env:
+            - name: LOG_LEVEL
+              value: debug

@@ -1,109 +1,50 @@
-const express = require('express');
-const axios = require('axios');
+const http = require('http');
+const { createApp } = require('./app');
+const logger = require('./logger');
 
-const app = express();
-const PORT = process.env.PORT || 3000;
-const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const PORT = Number(process.env.PORT || 3000);
 
-// TODO: Implement structured JSON logging (e.g., winston, pino)
-// All logs should include: timestamp, level, message, and request context
+function start() {
+  const app = createApp();
+  const server = http.createServer(app);
+  let shuttingDown = false;
 
-app.use(express.json());
+  server.listen(PORT, () => {
+    logger.info('api gateway started', { port: PORT });
+  });
 
-// TODO: Add request logging middleware
-// Should log: method, path, status code, response time in ms
+  function shutdown(signal) {
+    if (shuttingDown) {
+      return;
+    }
 
-// Health check endpoints
-app.get('/health', (req, res) => {
-  res.json({ status: 'healthy', service: 'api-gateway', timestamp: new Date().toISOString() });
-});
+    shuttingDown = true;
+    logger.info('shutdown signal received', { signal });
 
-app.get('/health/live', (req, res) => {
-  res.json({ status: 'alive' });
-});
+    server.close((error) => {
+      if (error) {
+        logger.error('graceful shutdown failed', { error: error.message });
+        process.exit(1);
+      }
 
-app.get('/health/ready', async (req, res) => {
-  try {
-    await axios.get(`${USER_SERVICE_URL}/health`, { timeout: 2000 });
-    res.json({ status: 'ready', dependencies: { userService: 'up' } });
-  } catch (error) {
-    res.status(503).json({
-      status: 'not ready',
-      dependencies: { userService: 'down' }
+      logger.info('api gateway stopped');
+      process.exit(0);
     });
+
+    setTimeout(() => {
+      logger.error('forced shutdown after timeout');
+      process.exit(1);
+    }, 10000).unref();
   }
-});
 
-// TODO: Add /metrics endpoint for Prometheus
-// Hint: Use prom-client library to expose default and custom metrics
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
-// Proxy to User Service
-app.get('/api/users', async (req, res) => {
-  try {
-    const response = await axios.get(`${USER_SERVICE_URL}/users`);
-    res.json(response.data);
-  } catch (error) {
-    console.error('Failed to fetch users:', error.message);
-    res.status(502).json({ error: 'Failed to fetch users from user-service' });
-  }
-});
+  return { app, server };
+}
 
-app.get('/api/users/:id', async (req, res) => {
-  try {
-    const response = await axios.get(`${USER_SERVICE_URL}/users/${req.params.id}`);
-    res.json(response.data);
-  } catch (error) {
-    if (error.response?.status === 404) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    console.error('Failed to fetch user:', error.message);
-    res.status(502).json({ error: 'Failed to fetch user from user-service' });
-  }
-});
+if (require.main === module) {
+  start();
+}
 
-app.post('/api/users', async (req, res) => {
-  try {
-    const response = await axios.post(`${USER_SERVICE_URL}/users`, req.body);
-    res.status(201).json(response.data);
-  } catch (error) {
-    console.error('Failed to create user:', error.message);
-    res.status(502).json({ error: 'Failed to create user' });
-  }
-});
-
-app.delete('/api/users/:id', async (req, res) => {
-  try {
-    const response = await axios.delete(`${USER_SERVICE_URL}/users/${req.params.id}`);
-    res.status(204).send();
-  } catch (error) {
-    if (error.response?.status === 404) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    console.error('Failed to delete user:', error.message);
-    res.status(502).json({ error: 'Failed to delete user' });
-  }
-});
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
-// Error handler
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err.message);
-  res.status(500).json({ error: 'Internal server error' });
-});
-
-// TODO: Implement graceful shutdown
-// The process should handle SIGTERM and SIGINT signals to:
-// 1. Stop accepting new connections
-// 2. Finish processing in-flight requests
-// 3. Close connections to downstream services
-// 4. Exit cleanly
-
-const server = app.listen(PORT, () => {
-  console.log(`API Gateway started on port ${PORT}`);
-});
-
-module.exports = { app, server };
+module.exports = { start, createApp };
