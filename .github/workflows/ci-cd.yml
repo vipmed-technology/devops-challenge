@@ -1,5 +1,8 @@
 name: CI/CD Pipeline
 
+env:
+  ENVIRONMENT: ${{ github.ref_name }}
+
 on:
   push:
     branches:
@@ -11,6 +14,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      - name: Set image tag
+        run: echo "IMAGE_TAG=${GITHUB_SHA}" >> $GITHUB_ENV
+
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -18,10 +24,14 @@ jobs:
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build API Gateway
-        run: docker build -t ghcr.io/${{ github.actor }}/api-gateway:latest ./apps/api-gateway
+        run: docker build -t ghcr.io/${{ github.actor }}/api-gateway:latest \
+              -t ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG} \
+              ./apps/api-gateway
 
       - name: Build User Service
-        run: docker build -t ghcr.io/${{ github.actor }}/user-service:latest ./apps/user-service
+        run: docker build -t ghcr.io/${{ github.actor }}/user-service:latest \
+             -t ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG} \
+             ./apps/user-service
 
       - name: Run tests (api-gateway)
         run: |
@@ -37,7 +47,7 @@ jobs:
         run: |
           cd apps/user-service
           npm install
-           if ls src/**/*.test.js 1> /dev/null 2>&1; then
+          if ls src/**/*.test.js 1> /dev/null 2>&1; then
             npm test
           else
             echo "No tests found, skipping"
@@ -46,4 +56,9 @@ jobs:
       - name: Push images
         run: |
           docker push ghcr.io/${{ github.actor }}/api-gateway:latest
+          docker push ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG}
+
           docker push ghcr.io/${{ github.actor }}/user-service:latest
+          docker push ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG}
+
+
