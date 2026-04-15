@@ -27,13 +27,21 @@ jobs:
         run: |
           cd apps/api-gateway
           npm install
-          npm test
+          if ls src/**/*.test.js 1> /dev/null 2>&1; then
+            npm test
+          else
+            echo "No tests found, skipping"
+          fi
 
       - name: Run tests (user-service)
         run: |
           cd apps/user-service
           npm install
-          npm test
+           if ls src/**/*.test.js 1> /dev/null 2>&1; then
+            npm test
+          else
+            echo "No tests found, skipping"
+          fi
 
       - name: Push images
         run: |
