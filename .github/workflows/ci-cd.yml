@@ -44,7 +44,9 @@ jobs:
 
       - name: Test
         working-directory: apps/${{ matrix.service }}
-        run: npm test
+        run: |
+          shopt -s globstar
+          npm test
 
   # ---------------------------------------------------------------------------
   # Job 2: Build & Push Images
