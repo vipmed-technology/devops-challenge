@@ -166,14 +166,36 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// TODO: Implement graceful shutdown
-// Handle SIGTERM/SIGINT: close server, disconnect Redis, exit cleanly
-
 const start = async () => {
   await initializeData();
   const server = app.listen(PORT, () => {
     console.log(`User Service started on port ${PORT}`);
   });
+
+  // Graceful shutdown
+  const shutdown = (signal) => {
+    console.log(`${signal} received. Shutting down gracefully...`);
+    server.close(async () => {
+      console.log('HTTP server closed');
+      try {
+        await redis.quit();
+        console.log('Redis connection closed');
+      } catch (err) {
+        console.error('Error closing Redis:', err.message);
+      }
+      process.exit(0);
+    });
+
+    // Force exit after 10s if connections aren't closed
+    setTimeout(() => {
+      console.error('Forced shutdown after timeout');
+      process.exit(1);
+    }, 10000).unref();
+  };
+
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
+
   return server;
 };
 

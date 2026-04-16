@@ -95,15 +95,26 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-// TODO: Implement graceful shutdown
-// The process should handle SIGTERM and SIGINT signals to:
-// 1. Stop accepting new connections
-// 2. Finish processing in-flight requests
-// 3. Close connections to downstream services
-// 4. Exit cleanly
-
 const server = app.listen(PORT, () => {
   console.log(`API Gateway started on port ${PORT}`);
 });
+
+// Graceful shutdown
+const shutdown = (signal) => {
+  console.log(`${signal} received. Shutting down gracefully...`);
+  server.close(() => {
+    console.log('HTTP server closed');
+    process.exit(0);
+  });
+
+  // Force exit after 10s if connections aren't closed
+  setTimeout(() => {
+    console.error('Forced shutdown after timeout');
+    process.exit(1);
+  }, 10000).unref();
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 module.exports = { app, server };
