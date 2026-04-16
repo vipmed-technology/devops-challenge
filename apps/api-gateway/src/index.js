@@ -107,3 +107,26 @@ const server = app.listen(PORT, () => {
 });
 
 module.exports = { app, server };
+
+// Graceful Shutdown Implementation for API Gateway
+const gracefulShutdown = (signal) => {
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+  
+  // 1. Stop accepting new connections
+  server.close(() => {
+    console.log('HTTP server closed. No longer accepting new connections.');
+    // 2 & 3. In a more complex app, we should close DB connections here.
+    // For this gateway, we just exit cleanly.
+    console.log('Graceful shutdown completed. Exiting process.');
+    process.exit(0);
+  });
+
+  // Failsafe: force shutdown if it takes too long (e.g., 10 seconds)
+  setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));

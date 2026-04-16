@@ -169,14 +169,55 @@ app.use((err, req, res, next) => {
 // TODO: Implement graceful shutdown
 // Handle SIGTERM/SIGINT: close server, disconnect Redis, exit cleanly
 
+let server;
+
 const start = async () => {
   await initializeData();
-  const server = app.listen(PORT, () => {
+  server = app.listen(PORT, () => {
     console.log(`User Service started on port ${PORT}`);
   });
-  return server;
 };
 
 start();
+
+// Graceful Shutdown Implementation for User Service
+const gracefulShutdown = async (signal) => {
+  console.log(`\nReceived ${signal}. Starting graceful shutdown...`);
+  
+  // Failsafe timer
+  const forceExit = setTimeout(() => {
+    console.error('Could not close connections in time, forcefully shutting down');
+    process.exit(1);
+  }, 10000);
+
+  try {
+    // 1. Stop accepting new HTTP connections
+    if (server) {
+      await new Promise((resolve) => {
+        server.close(() => {
+          console.log('HTTP server closed.');
+          resolve();
+        });
+      });
+    }
+
+    // 2. Disconnect Redis cleanly
+    if (redis.status !== 'end') {
+      await redis.quit();
+      console.log('Redis connection closed.');
+    }
+
+    console.log('Graceful shutdown completed. Exiting process.');
+    clearTimeout(forceExit);
+    process.exit(0);
+  } catch (error) {
+    console.error('Error during graceful shutdown:', error);
+    clearTimeout(forceExit);
+    process.exit(1);
+  }
+};
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 module.exports = { app };
