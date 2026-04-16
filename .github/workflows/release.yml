@@ -1,0 +1,78 @@
+name: Semantic Release & Changelog
+
+on:
+  pull_request:
+    types:
+      - closed
+    branches:
+      - main
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    # Grant necessary permissions for the GITHUB_TOKEN to create tags and releases
+    permissions: write-all
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 1: Calculate the next Semantic Version (SemVer) based on commit messages 
+      # (e.g., feat: = minor bump, fix: = patch bump)
+      - name: Determine Next Version Tag
+        if: github.event.pull_request.merged == true
+        id: tag
+        uses: K-Phoen/semver-release-action@master
+        with:
+          release_branch: main
+          release_strategy: tag # Only creates the tag, doesn't create the release automatically here
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Built-in token, no extra setup needed
+      
+      # Step 2: Create the official GitHub Release using the tag generated in the previous step
+      - name: Create GitHub Release
+        if: github.event.pull_request.merged == true
+        id: create-release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          release_name: Release ${{ steps.tag.outputs.tag }}
+          draft: false
+          prerelease: false
+          body: |
+            Automated semantic release.
+            To see the full details, check the [CHANGELOG.md](./CHANGELOG.md) file.
+
+  generate-changelog:
+    # Only run this job if the PR was actually merged (not just closed without merging)
+    if: github.event.action == 'closed' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    # Wait for the release to be created first
+    needs:
+      - create-release
+    permissions: write-all
+    steps:
+    # Step 1: Checkout the full git history (fetch-depth: 0) so the changelog generator can see all commits
+    - name: Checkout Code with Full History
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+        persist-credentials: true
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Step 2: Read the commit history and generate/update the CHANGELOG.md file
+    - name: "✏️ Generate Release Changelog"
+      uses: janheinrichmerker/action-github-changelog-generator@v2.3
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    # Step 3: Commit the new CHANGELOG.md directly to the main branch
+    # The [skip ci] tag prevents this automatic commit from triggering other workflows (like tests/builds) again
+    - name: 🚀 Push Changelog
+      run: |
+        git config --local user.name "github-actions[bot]"
+        git config --local user.email "github-actions[bot]@users.noreply.github.com"
+        git add CHANGELOG.md
+        git commit -m "chore(release): auto generate changelog [skip ci]" || echo "No changes to commit"
+        git push

@@ -34,6 +34,7 @@ Traffic flows linearly: `Client -> API Gateway -> User Service -> Redis`.
 - **Deployment strategy:** Branch-based deployment. Pushes to `main` apply the `prod` Kustomize overlay, while pushes to `develop` apply the `dev` overlay.
 - **Rollback approach:** Git acts as the source of truth. Rollbacks are performed by reverting the Git commit, which triggers the pipeline to deploy the previous stable state.
 - **Secret management:** CI/CD variables (like GHCR tokens and Kubeconfig) are stored securely in GitHub Actions Secrets.
+- **Release Management (Semantic Versioning):** Implemented an automated release workflow (`release.yml`). Upon merging a PR to `main`, the pipeline calculates the next semantic version (SemVer) based on Conventional Commits, creates a GitHub Release, and auto-generates a `CHANGELOG.md`. This ensures traceable, predictable, and compliant versioning.
 
 ### Environment & Secrets Management
 - **How do you separate config from code?** By using `ConfigMaps` for non-sensitive data (ports, URLs, log levels) and `Secrets` for sensitive data, injecting them as environment variables.
