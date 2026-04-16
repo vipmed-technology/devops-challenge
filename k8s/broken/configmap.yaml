@@ -3,13 +3,15 @@ kind: ConfigMap
 metadata:
   name: app-config
   namespace: devops-challenge
+# [ISSUE 5] Context: This entire ConfigMap is created but never mounted by any of the Deployments.
 data:
   PORT_GATEWAY: "3000"
   PORT_USER_SERVICE: "3001"
   USER_SERVICE_URL: "http://user-service:3001"
   REDIS_HOST: "redis"
   REDIS_PORT: "6379"
-  REDIS_PASSWORD: "supersecret"
+  REDIS_PASSWORD: "supersecret" # [ISSUE 4] Security Risk: Sensitive data in a ConfigMap. Should be in a Secret.
   LOG_LEVEL: "info"
   NODE_ENV: "production"
-  DATABASE_URL: "postgresql://admin:p4ssw0rd@db:5432/app"
+  DATABASE_URL: "postgresql://admin:p4ssw0rd@db:5432/app" # [ISSUE 4] Security Risk: Database credentials exposed in plain text.
+  

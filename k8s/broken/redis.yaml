@@ -18,6 +18,8 @@ spec:
           image: redis:7-alpine
           ports:
             - containerPort: 6379
+          # [ISSUE 9] Security Risk: Password hardcoded in the startup command. 
+          # Should use an environment variable mapped from a Kubernetes Secret.
           command: ["redis-server", "--requirepass", "supersecret"]
           resources:
             requests:
@@ -26,6 +28,8 @@ spec:
             limits:
               cpu: "200m"
               memory: "128Mi"
+          # [ISSUE 10] Data Loss Risk: No volumeMounts or PersistentVolumeClaim defined. 
+          # If this pod crashes or restarts, all Redis data will be permanently lost in production.
 ---
 apiVersion: v1
 kind: Service
@@ -39,3 +43,4 @@ spec:
   ports:
     - port: 6379
       targetPort: 6379
+      

@@ -7,18 +7,18 @@ spec:
   replicas: 3
   selector:
     matchLabels:
-      app: api-gateway
+      app: api-gateway # [ISSUE 1] This selector expects 'api-gateway'...
   template:
     metadata:
       labels:
-        app: gateway
+        app: gateway   # [ISSUE 1] ...but the template provides 'gateway'. ReplicaSet will fail to manage pods.
     spec:
       containers:
         - name: api-gateway
-          image: devops-challenge/api-gateway:latest
+          image: devops-challenge/api-gateway:latest # [ISSUE 8] Anti-pattern: Using mutable ':latest' tag in production.
           ports:
-            - containerPort: 8080
-          env:
+            - containerPort: 8080 # [ISSUE 7] Mismatch: Declared as 8080, but the app explicitly uses PORT 3000 below.
+          env: # [ISSUE 5] Anti-pattern: Hardcoded env vars instead of using `envFrom: - configMapRef: name: app-config`.
             - name: PORT
               value: "3000"
             - name: USER_SERVICE_URL
@@ -55,3 +55,4 @@ spec:
   ports:
     - port: 80
       targetPort: 3000
+      

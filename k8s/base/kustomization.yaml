@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Defines the base manifests that will be deployed
+resources:
+  - redis.yaml
+  - user-service.yaml
+  - api-gateway.yaml
+  - network-policies.yaml
+  - api-gateway-pdb.yaml
+  - user-service-pdb.yaml
+
+# Dynamically generates a ConfigMap with a unique hash suffix for safe rollouts
+configMapGenerator:
+  - name: app-config
+    literals:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - USER_SERVICE_URL=http://user-service:3001
+
+# Dynamically generates a Secret. 
+# NOTE: This is a placeholder for the base. Overlays will inject the real values.
+secretGenerator:
+  - name: app-secrets
+    literals:
+      - redis-password=change-me-in-overlays

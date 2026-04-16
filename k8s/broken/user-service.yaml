@@ -15,14 +15,14 @@ spec:
     spec:
       containers:
         - name: user-service
-          image: devops-challenge/user-service:latest
+          image: devops-challenge/user-service:latest # [ISSUE 8] Anti-pattern: Using mutable ':latest' tag in production.
           ports:
             - containerPort: 3001
-          env:
+          env: # [ISSUE 5] Anti-pattern: Hardcoded env vars instead of using the existing ConfigMap.
             - name: PORT
               value: "3001"
             - name: REDIS_HOST
-              value: "redis-master"
+              value: "redis-master" # [ISSUE 3] Wrong DNS: The redis service is named 'redis', not 'redis-master'. Connection will fail.
             - name: REDIS_PORT
               value: "6379"
           resources:
@@ -38,7 +38,7 @@ spec:
               port: 3001
             initialDelaySeconds: 3
             periodSeconds: 5
-            failureThreshold: 1
+            failureThreshold: 1 # [ISSUE 6] Too aggressive: A single missed ping will kill the pod. Should be at least 3.
           readinessProbe:
             httpGet:
               path: /health/ready
@@ -57,4 +57,5 @@ spec:
     app: user-service
   ports:
     - port: 3001
-      targetPort: 8080
+      targetPort: 8080 # [ISSUE 2] Mismatch: Service routes to 8080, but container listens on 3001. Will cause 502 Bad Gateway.
+      
