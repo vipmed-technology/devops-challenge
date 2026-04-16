@@ -1,0 +1,75 @@
+# Network Policies
+# Default deny all ingress, then allow only required traffic paths:
+#   ingress -> api-gateway:3000
+#   api-gateway -> user-service:3001
+#   user-service -> redis:6379
+
+# Default deny all ingress in the namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: devops-challenge
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Allow traffic to api-gateway from any source (ingress controller, port-forward, etc.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-api-gateway-ingress
+  namespace: devops-challenge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: api-gateway
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - port: 3000
+          protocol: TCP
+---
+# Allow traffic to user-service only from api-gateway
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-user-service-from-api-gateway
+  namespace: devops-challenge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: user-service
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: api-gateway
+      ports:
+        - port: 3001
+          protocol: TCP
+---
+# Allow traffic to redis only from user-service
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-redis-from-user-service
+  namespace: devops-challenge
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: user-service
+      ports:
+        - port: 6379
+          protocol: TCP

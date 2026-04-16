@@ -1,0 +1,208 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/esteban1192/devops-challenge
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: Lint & Test
+  # ---------------------------------------------------------------------------
+  test:
+    name: Test (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, user-service]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: apps/${{ matrix.service }}/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/${{ matrix.service }}
+        run: npm ci
+
+      - name: Lint
+        working-directory: apps/${{ matrix.service }}
+        run: npm run lint
+
+      - name: Test
+        working-directory: apps/${{ matrix.service }}
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Build & Push Images
+  # ---------------------------------------------------------------------------
+  build-push:
+    name: Build & Push (${{ matrix.service }})
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api-gateway, user-service]
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+            type=raw,value=latest,enable=${{ github.ref_name == 'main' }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/${{ matrix.service }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Deploy to Kind (prove it works)
+  # ---------------------------------------------------------------------------
+  deploy:
+    name: Deploy (${{ github.ref_name == 'main' && 'prod' || 'dev' }})
+    needs: build-push
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    env:
+      DEPLOY_ENV: ${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- AWS credentials via OIDC ---
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: us-east-1
+
+      # --- Tools ---
+      - name: Install kind
+        run: |
+          curl -Lo ./kind https://github.com/kubernetes-sigs/kind/releases/download/v0.27.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      # --- Cluster ---
+      - name: Create kind cluster
+        run: kind create cluster --name devops-challenge --wait 60s
+
+      - name: Install External Secrets Operator
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io
+          helm repo update
+          helm install external-secrets external-secrets/external-secrets \
+            -n external-secrets --create-namespace --wait --timeout 120s
+
+      # --- Build & load images into kind ---
+      - name: Build and load images
+        env:
+          IMAGE_TAG: sha-${{ github.sha }}
+        run: |
+          SHORT_SHA=${GITHUB_SHA::7}
+          docker build -t devops-challenge/api-gateway:sha-${SHORT_SHA} ./apps/api-gateway
+          docker build -t devops-challenge/user-service:sha-${SHORT_SHA} ./apps/user-service
+          kind load docker-image devops-challenge/api-gateway:sha-${SHORT_SHA} --name devops-challenge
+          kind load docker-image devops-challenge/user-service:sha-${SHORT_SHA} --name devops-challenge
+
+      # --- Deploy ---
+      - name: Deploy to kind
+        run: |
+          chmod +x ./scripts/deploy.sh
+          SHORT_SHA=${GITHUB_SHA::7}
+          ./scripts/deploy.sh ${{ env.DEPLOY_ENV }} --image-tag=sha-${SHORT_SHA}
+
+      # --- Smoke test ---
+      - name: Smoke test
+        run: |
+          kubectl port-forward svc/api-gateway 3000:3000 -n devops-challenge &
+          sleep 5
+
+          echo "--- Health check ---"
+          curl -sf http://localhost:3000/health | jq .
+
+          echo "--- Users endpoint ---"
+          curl -sf http://localhost:3000/api/users | jq .
+
+          echo "--- Create user ---"
+          curl -sf -X POST http://localhost:3000/api/users \
+            -H "Content-Type: application/json" \
+            -d '{"name":"CI Test","email":"ci@test.com"}' | jq .
+
+          echo "All smoke tests passed!"
+
+  # ---------------------------------------------------------------------------
+  # Job 4: Notification
+  # ---------------------------------------------------------------------------
+  notify:
+    name: Notify
+    needs: [test, build-push, deploy]
+    if: always() && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy notification
+        run: |
+          ENV=${{ github.ref_name == 'main' && 'prod' || 'dev' }}
+          DEPLOY="${{ needs.deploy.result }}"
+          TEST="${{ needs.test.result }}"
+          BUILD="${{ needs.build-push.result }}"
+          SHORT_SHA=${GITHUB_SHA::7}
+
+          if [ "$DEPLOY" = "success" ]; then
+            EMOJI="🚀"; STATUS="✅ Success"
+          else
+            EMOJI="🔥"; STATUS="❌ Failed"
+          fi
+
+          cat >> "$GITHUB_STEP_SUMMARY" <<EOF
+          ## ${EMOJI} Deploy ${STATUS}
+
+          | Step | Result |
+          |------|--------|
+          | Tests | ${TEST} |
+          | Build & Push | ${BUILD} |
+          | Deploy (${ENV}) | ${DEPLOY} |
+
+          **Environment:** ${ENV}
+          **Commit:** ${SHORT_SHA}
+          **Branch:** ${GITHUB_REF}
+          **Actor:** ${GITHUB_ACTOR}
+          EOF
