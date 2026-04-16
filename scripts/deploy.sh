@@ -65,13 +65,6 @@ if [[ "$SKIP_TF" == "false" ]]; then
   # Create workspace if it doesn't exist, then select it
   terraform workspace select "$ENV" 2>/dev/null || terraform workspace new "$ENV"
 
-  # TF_VAR_redis_password must be set in the environment (CI injects it from GitHub Secrets)
-  if [[ -z "${TF_VAR_redis_password:-}" ]]; then
-    echo "Error: TF_VAR_redis_password is not set."
-    echo "  export TF_VAR_redis_password='your-password'"
-    exit 1
-  fi
-
   terraform apply -auto-approve -input=false
   echo "--- Terraform: done ---"
 else
