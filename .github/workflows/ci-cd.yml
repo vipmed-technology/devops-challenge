@@ -29,7 +29,8 @@ jobs:
               ./apps/api-gateway
 
       - name: Build User Service
-        run: docker build -t ghcr.io/${{ github.actor }}/user-service:latest \
+        run: docker build \
+             -t ghcr.io/${{ github.actor }}/user-service:latest \
              -t ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG} \
              ./apps/user-service
 
