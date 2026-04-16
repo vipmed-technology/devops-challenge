@@ -99,6 +99,29 @@ kubectl create secret generic aws-sm-credentials \
 
 echo "--- aws-sm-credentials: done ---"
 
+# ---------- Step 2b: Create redis-credentials K8s secret directly ----------
+# The ExternalSecret and Deployment are applied simultaneously, but ESO needs
+# time to reconcile (SecretStore -> AWS SM -> K8s Secret). Pods referencing the
+# secret will be stuck in CreateContainerConfigError until it exists.
+# Fix: fetch the password from AWS SM and create the secret before kustomize.
+echo ""
+echo "--- Creating redis-credentials K8s secret ---"
+REDIS_SECRET_NAME="devops-challenge/${ENV}/redis-password"
+REDIS_PASSWORD="$(aws secretsmanager get-secret-value \
+  --secret-id "$REDIS_SECRET_NAME" \
+  --query 'SecretString' --output text 2>/dev/null \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['password'])" 2>/dev/null || true)"
+
+if [[ -n "$REDIS_PASSWORD" ]]; then
+  kubectl create secret generic redis-credentials \
+    --namespace "$NAMESPACE" \
+    --from-literal=password="$REDIS_PASSWORD" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  echo "--- redis-credentials: created from AWS Secrets Manager ---"
+else
+  echo "WARNING: could not fetch redis password from AWS SM, relying on ESO"
+fi
+
 # ---------- Step 3: Apply Kustomize overlay ----------
 echo ""
 echo "--- Applying Kustomize overlay: $ENV ---"
