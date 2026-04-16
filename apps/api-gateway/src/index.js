@@ -1,49 +1,42 @@
-const test = require('node:test');
-const assert = require('node:assert');
-const http = require('node:http');
-const { app } = require('./index');
+const express = require('express');
+const axios = require('axios');
+const pino = require('pino');
+const pinoHttp = require('pino-http');
+const client = require('prom-client');
 
-test('User Service', async (t) => {
-  let server;
-  let port;
+const app = express();
+const PORT = process.env.PORT || 3000;
+const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
 
-  t.before(() => {
-    return new Promise((resolve) => {
-      server = app.listen(0, () => {
-        port = server.address().port;
-        resolve();
-      });
-    });
-  });
+const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
+app.use(pinoHttp({ logger }));
+app.use(express.json());
 
-  t.after(() => {
-    if (server) server.close();
-  });
+const register = new client.Registry();
+client.collectDefaultMetrics({ register });
 
-  const makeRequest = (path) => {
-    return new Promise((resolve, reject) => {
-      http.get(`http://localhost:${port}${path}`, (res) => {
-        let data = '';
-        res.on('data', (chunk) => { data += chunk; });
-        res.on('end', () => {
-          resolve({
-            statusCode: res.statusCode,
-            body: JSON.parse(data)
-          });
-        });
-      }).on('error', reject);
-    });
-  };
-
-  await t.test('GET /health should return healthy status', async () => {
-    const res = await makeRequest('/health');
-    assert.strictEqual(res.statusCode, 200);
-    assert.strictEqual(res.body.service, 'user-service');
-  });
-
-  await t.test('GET /users should return user list', async () => {
-    const res = await makeRequest('/users');
-    assert.strictEqual(res.statusCode, 200);
-    assert.ok(Array.isArray(res.body.data));
-  });
+app.get('/metrics', async (req, res) => {
+  res.setHeader('Content-Type', register.contentType);
+  res.send(await register.metrics());
 });
+
+app.get('/health', (req, res) => res.json({ status: 'healthy', service: 'api-gateway' }));
+
+app.get('/api/users', async (req, res) => {
+  try {
+    const response = await axios.get(`${USER_SERVICE_URL}/users`);
+    res.json(response.data);
+  } catch (error) {
+    res.status(502).json({ error: 'User Service unreachable' });
+  }
+});
+
+// Export app for testing
+module.exports = { app };
+
+// Only start the server if called directly (not via require)
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info(`API Gateway started on port ${PORT}`);
+  });
+}
