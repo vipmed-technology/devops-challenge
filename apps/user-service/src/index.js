@@ -1,13 +1,27 @@
 const express = require('express');
 const Redis = require('ioredis');
 const { v4: uuidv4 } = require('uuid');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const winston = require('winston');
+
 
 // TODO: Implement structured JSON logging (e.g., winston, pino)
-// All logs should include: timestamp, level, message, and relevant context
+//--------------------------------------------------------------
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [new winston.transports.Console()]
+});
+//--------------------------------------------------------------
 
+// All logs should include: timestamp, level, message, and relevant context
+//-----------------------------------------------------
+// Capture metrics By default (CPU, Mem, etc.)
+client.collectDefaultMetrics();
+//-----------------------------------------------------
 // Redis connection
 const redis = new Redis({
   host: process.env.REDIS_HOST || 'localhost',
@@ -45,7 +59,12 @@ app.get('/health/ready', async (req, res) => {
 });
 
 // TODO: Add /metrics endpoint for Prometheus
-
+//-------------------------------------------------
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+//-------------------------------------------------
 const USERS_KEY = 'users';
 
 // Initialize sample data
@@ -74,7 +93,10 @@ app.get('/users', async (req, res) => {
     const users = data ? JSON.parse(data) : [];
     res.json({ data: users, total: users.length });
   } catch (error) {
-    console.error('Failed to get users:', error.message);
+//    console.error('Failed to get users:', error.message);
+    logger.error('Failed to fetch users', {
+      error: error.message
+    });
     res.status(500).json({ error: 'Failed to retrieve users' });
   }
 });
@@ -172,7 +194,8 @@ app.use((err, req, res, next) => {
 const start = async () => {
   await initializeData();
   const server = app.listen(PORT, () => {
-    console.log(`User Service started on port ${PORT}`);
+//    console.log(`User Service started on port ${PORT}`);
+    logger.info(`User Service started on port ${PORT}`);
   });
   return server;
 };

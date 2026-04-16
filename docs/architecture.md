@@ -1,76 +1,189 @@
-# Architecture Documentation
 
-> **Note to Candidate:** Replace this template with your actual architecture decisions.
+# Architecture Documentation
 
 ## System Architecture
 
-Draw or describe the architecture of your deployment.
+The application is a microservices setup deployed on Kubernetes:
 
-## Your Decisions
+**API Gateway (Node.js)**:.Receives client requests and forwards them to the user-service
+**User Service (Node.js)**: User data and business logic.
+**Redis**: Stores user data.
+**Kubernetes (kind cluster)**: Runs and manages the containers.
+**GitHub Actions**: Builds and pushes Docker images.
+**GitHub Container Registry (GHCR)**: Stores the images.
 
-### Docker Strategy
+**Flow:**
+Client → API Gateway → User Service → Redis
+---
 
-- Base image choice:
-- Multi-stage build approach:
-- Security considerations:
-- Layer optimization:
+## Docker Strategy
 
-### Kubernetes Design
+###Base image choice(Alpine):
 
-- Namespace strategy:
-- Resource allocation rationale:
-- Health check configuration:
-- Scaling strategy:
+Used Node.js base images to keep compatibility and simplicity.
 
-### CI/CD Pipeline
+### Build approach:
 
-- Pipeline stages:
-- Deployment strategy:
-- Rollback approach:
-- Secret management:
+Used multi-stage builds to separate dependency installation from runtime image.
 
-### Environment & Secrets Management
+### Security considerations:
 
-- How do you separate config from code?
-- How do you handle sensitive vs non-sensitive config?
-- How would you manage secrets in production? (e.g., Vault, Sealed Secrets, external-secrets, SOPS)
-- How do you handle different environments (dev/staging/prod)?
+* Containers run as non-root user
+* ".dockerignore" used to avoid unnecessary files
 
-### Monitoring Strategy
+### Optimization:
 
-- Metrics collected:
-- Logging format:
-- Alerting rules (proposed):
+Dependencies are installed before copying source code to improve caching.
+
+---
+
+## Kubernetes Design
+
+### Namespace:
+
+Used default namespace to keep the setup simple.
+
+### Resources:
+
+Defined basic CPU and memory requests/limits to avoid overconsumption.
+
+### Health checks:
+
+**Liveness probe**: checks if container should be restarted
+**Readiness probe**: checks if service is ready to receive traffic
+
+### Scaling:
+
+Application is stateless and could be scaled horizontally (HPA defined conceptually).
+
+---
+
+## CI/CD Pipeline
+
+### Pipeline steps:
+
+1. Checkout code
+2. Login to GHCR (Creating Token in Github and test Secrets)
+3. Build Docker images
+4. Run tests (skipped if not present)
+5. Push images (9 workflow runs)
+
+### Deployment:
+
+Deployment is done manually using "kubectl apply".
+
+### Rollback:
+
+Images are tagged with commit SHA, allowing rollback to previous versions.
+
+### Secrets:
+
+Used GitHub Actions secrets for authentication.
+
+---
+
+## Image Tagging Strategy
+
+### Decision:
+
+Used:
+
+* latest for simplicity
+* commit SHA for traceability
+
+### Why:
+
+Allows identifying exactly which version is running.
+
+---
+
+## Environment & Configuration
+
+### Config management:
+
+* Used environment variables
+* ConfigMaps for non-sensitive values
+
+### Secrets:
+
+* Not fully implemented, but would use Kubernetes Secrets in production or GitHubSecrets
+
+### Environments:
+
+Basic separation using branches (dev vs main).
+
+---
+
+## Monitoring Strategy
+
+### Metrics:
+
+Basic application metrics via "/metrics" endpoint (Prometheus-ready).
+
+### Logging:
+
+Simple structured logging using JSON format.
+
+### Alerts (conceptual):
+
+* High error rate
+* Service not responding
+* High latency
+
+---
 
 ## Trade-offs & Assumptions
 
-1. **Trade-off 1:**
-   - Decision:
-   - Rationale:
-   - Alternative considered:
+### Trade-off:
+
+**Manual deployment instead of full automation**
+To keep the solution simple within time limits.
+
+---
+
+### Trade-off:
+
+**Basic monitoring instead of full stack**
+Focused on functionality over completeness, Service ready to receive metrics in ELK or another solution.
+
+---
+
+### Trade-off:
+
+**Public images instead of private registry**
+Avoided additional configuration complexity.
+
+---
 
 ## Security Considerations
 
-Document security measures you implemented.
+* No secrets hardcoded
+* Minimal container configuration
+
+---
 
 ## What I Would Improve With More Time
 
-1.
-2.
-3.
+* Automate deployment (CD)
+* Add Prometheus and Grafana
+* Improve test coverage
+* Add better secret management
+* Implement GitOps (ArgoCD)
+* Use Trivy or Snyk for Analysis
+* Create a Draw documentation of this enviroment
+---
 
 ## Time Spent
 
-| Task | Time |
-|------|------|
-| Part 1: Docker | |
-| Part 2: Kubernetes | |
-| Part 3: CI/CD | |
-| Part 4: Monitoring | |
-| Part 5: Troubleshooting | |
-| Documentation | |
-| **Total** | |
-
+| Task            | Time  |
+| --------------- | ----- |
+| Docker          | ~2h   |
+| Kubernetes      | ~3h   |
+| CI/CD           | ~2h   |
+| Monitoring      | ~1h   |
+| Troubleshooting | ~2.5h |
+| Documentation   | ~1.5h   |
+| **Total**       | ~12h  |
 
 ----------------------------------------------------------------------------------
 ### Repository Setup
