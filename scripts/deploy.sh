@@ -107,7 +107,7 @@ if [[ -n "$IMAGE_TAG" ]]; then
   echo "  Overriding image tags to: $IMAGE_TAG"
   # Build kustomize output, override image tags, apply
   kubectl kustomize "$K8S_OVERLAY" \
-    | sed -E "s#(image: .+devops-challenge/(api-gateway|user-service)):.*#\1:${IMAGE_TAG}#g" \
+    | sed -E "s#(image: .*devops-challenge/(api-gateway|user-service)):.*#\1:${IMAGE_TAG}#g" \
     | kubectl apply -f -
 else
   kubectl apply -k "$K8S_OVERLAY"
