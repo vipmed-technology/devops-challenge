@@ -78,6 +78,7 @@ echo "--- Creating aws-sm-credentials K8s secret for ESO ---"
 # Resolve AWS credentials — works with both env vars and AWS_PROFILE
 AWS_AK="${AWS_ACCESS_KEY_ID:-$(aws configure get aws_access_key_id 2>/dev/null || true)}"
 AWS_SK="${AWS_SECRET_ACCESS_KEY:-$(aws configure get aws_secret_access_key 2>/dev/null || true)}"
+AWS_ST="${AWS_SESSION_TOKEN:-}"
 
 if [[ -z "$AWS_AK" ]] || [[ -z "$AWS_SK" ]]; then
   echo "Error: Could not resolve AWS credentials."
@@ -88,11 +89,12 @@ fi
 # Ensure namespace exists
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
 
-# Create or update the secret
+# Build secret literals — include session token (empty string if not using STS/OIDC)
 kubectl create secret generic aws-sm-credentials \
   --namespace "$NAMESPACE" \
   --from-literal=access-key="$AWS_AK" \
   --from-literal=secret-access-key="$AWS_SK" \
+  --from-literal=session-token="${AWS_ST}" \
   --dry-run=client -o yaml | kubectl apply -f -
 
 echo "--- aws-sm-credentials: done ---"
