@@ -6,63 +6,60 @@
 
 ### Application Metrics
 
-List the metrics you would collect from the applications:
-
-| Metric Name | Type | Description |
-|-------------|------|-------------|
-| | | |
-| | | |
-| | | |
+**http_requests_total** → Total number of requests
+**http_request_duration_seconds** → Request latency
+**process_cpu_seconds_total** → CPU usage
+**process_resident_memory_bytes** → Memory usage
 
 ### Infrastructure Metrics
 
-| Metric Name | Source | Description |
-|-------------|--------|-------------|
-| | | |
-| | | |
+**container_cpu_usage_seconds_total** → CPU per container
+**container_memory_usage_bytes** → Memory per container
+**kube_pod_status_ready** → Pod readiness status
+**kube_pod_container_status_restarts_total** → Container restarts
 
 ## Logging
 
 ### Log Format
 
 Describe the structured logging format you implemented:
-
-```json
-{}
-```
+{
+  "level": "info",
+  "message": "request",
+  "method": "GET",
+  "path": "/api/users",
+  "status": 200,
+  "duration": 12
+}
 
 ### Log Aggregation Strategy
 
-How would you aggregate logs in production? Explain your choice.
+**ELK Stack or Loki + Grafana**
 
 ## Alerting Rules
 
-Define at least 3 alerting rules using Prometheus format:
+## Alerting Rules
 
+### High Error Rate
+##--------------------------
+**alert: HighErrorRate**
+  expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+##--------------------------
+**Pod Not Ready**
+- alert: PodNotReady
+  expr: kube_pod_status_ready{condition="false"} == 1
+##------------------------
+**High Memory Usage **
+- alert: HighMemoryUsage
+  expr: container_memory_usage_bytes > 200000000
+---
 ### Alert 1:
-
-```yaml
-# Prometheus alerting rule
-```
-
-### Alert 2:
-
-```yaml
-```
-
-### Alert 3:
-
-```yaml
-```
-
 ## Dashboards
 
-If you created a Grafana dashboard, describe the panels and what they show:
-
-1.
-2.
-3.
-
+1. Request rate
+2. Latency
+3. CPU and memory usage
 ## Distributed Tracing (Bonus)
 
-If you implemented tracing, describe your approach.
+Can be implemented using OpenTelemetry or Dynatrace
+

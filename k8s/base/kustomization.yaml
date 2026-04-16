@@ -1,0 +1,8 @@
+resources:
+  - user-service-deployment.yaml
+  - user-service-service.yaml
+  - redis-deployment.yaml
+  - redis-service.yaml
+  - api-gateway-deployment.yaml
+  - api-gateway-service.yaml
+  - configmap.yaml
