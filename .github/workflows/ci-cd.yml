@@ -8,12 +8,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # Matches the repository name (e.g., username/repo)
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   # ==========================================
-  # STAGE 1 & 2: Build & Test
+  # STAGE 1 & 2: Build & Test (Now with Security!)
   # ==========================================
   build-and-test:
     runs-on: ubuntu-latest
@@ -35,6 +34,17 @@ jobs:
           context: ./apps/${{ matrix.service }}
           load: true # Loads image into local Docker runtime for testing
           tags: ${{ matrix.service }}:test
+
+      # BONUS: Run Trivy Security Scanner
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ matrix.service }}:test'
+          format: 'table'
+          exit-code: '1' # Fails the pipeline if vulnerabilities are found
+          ignore-unfixed: true
+          vuln-type: 'os,library'
+          severity: 'CRITICAL,HIGH'
 
       # 2. Run tests (Test step)
       - name: Setup Node.js
@@ -58,7 +68,7 @@ jobs:
   push-to-registry:
     needs: build-and-test
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' # Only push on actual commits, not PRs
+    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
@@ -117,11 +127,9 @@ jobs:
             echo "env=dev" >> $GITHUB_OUTPUT
           fi
 
-      # Deployment Simulation Logic
       - name: Deploy via Kustomize
         run: |
           echo "Deploying to ${{ steps.set-env.outputs.env }} environment..."
-          # In a real environment, we would use:
           # cd k8s/overlays/${{ steps.set-env.outputs.env }}
           # kustomize edit set image api-gateway=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}-api-gateway:sha-${GITHUB_SHA::7}
           # kubectl apply -k .

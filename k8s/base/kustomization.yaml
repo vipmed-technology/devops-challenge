@@ -7,6 +7,8 @@ resources:
   - user-service.yaml
   - api-gateway.yaml
   - network-policies.yaml
+  - api-gateway-pdb.yaml
+  - user-service-pdb.yaml
 
 # Dynamically generates a ConfigMap with a unique hash suffix for safe rollouts
 configMapGenerator:
