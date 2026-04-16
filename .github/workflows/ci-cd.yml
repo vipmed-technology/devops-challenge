@@ -24,7 +24,8 @@ jobs:
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build API Gateway
-        run: docker build -t ghcr.io/${{ github.actor }}/api-gateway:latest \
+        run: docker build \
+              -t ghcr.io/${{ github.actor }}/api-gateway:latest \
               -t ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG} \
               ./apps/api-gateway
 
