@@ -1,17 +1,50 @@
 const express = require('express');
 const axios = require('axios');
+const client = require('prom-client');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://localhost:3001';
+const winston = require('winston');
+
+
 
 // TODO: Implement structured JSON logging (e.g., winston, pino)
-// All logs should include: timestamp, level, message, and request context
+//--------------------------------------------------------------
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.json(),
+  transports: [new winston.transports.Console()]
+});
+//--------------------------------------------------------------
 
+
+
+// All logs should include: timestamp, level, message, and request context
+//-----------------------------------------------------
+// Capture metrics By default (CPU, Mem, etc.)
+client.collectDefaultMetrics();
+//-----------------------------------------------------
 app.use(express.json());
 
 // TODO: Add request logging middleware
 // Should log: method, path, status code, response time in ms
+//--------------------------------------------------------------
+app.use((req, res, next) => {
+  const start = Date.now();
+
+  res.on('finish', () => {
+    logger.info('request', {
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      duration: Date.now() - start
+    });
+  });
+
+  next();
+});
+//------------------------------------------------------------
 
 // Health check endpoints
 app.get('/health', (req, res) => {
@@ -35,6 +68,14 @@ app.get('/health/ready', async (req, res) => {
 });
 
 // TODO: Add /metrics endpoint for Prometheus
+//-------------------------------------------------
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', client.register.contentType);
+  res.end(await client.register.metrics());
+});
+//-------------------------------------------------
+
+
 // Hint: Use prom-client library to expose default and custom metrics
 
 // Proxy to User Service
@@ -43,7 +84,10 @@ app.get('/api/users', async (req, res) => {
     const response = await axios.get(`${USER_SERVICE_URL}/users`);
     res.json(response.data);
   } catch (error) {
-    console.error('Failed to fetch users:', error.message);
+//    console.error('Failed to fetch users:', error.message);
+    logger.error('Failed to fetch users', {
+      error: error.message
+    });
     res.status(502).json({ error: 'Failed to fetch users from user-service' });
   }
 });
@@ -103,7 +147,8 @@ app.use((err, req, res, next) => {
 // 4. Exit cleanly
 
 const server = app.listen(PORT, () => {
-  console.log(`API Gateway started on port ${PORT}`);
+//  console.log(`API Gateway started on port ${PORT}`);
+    logger.info('API Gateway started', { port: PORT });
 });
 
 module.exports = { app, server };
