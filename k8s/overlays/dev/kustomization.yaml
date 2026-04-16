@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - path: patches/configmap.yaml
+  - path: patches/api-gateway.yaml
+  - path: patches/user-service.yaml
+  - path: patches/redis.yaml
+
+# Override to use local images loaded via `kind load docker-image`
+images:
+  - name: devops-challenge/api-gateway
+    newTag: local
+  - name: devops-challenge/user-service
+    newTag: local

@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: devops-challenge
+data:
+  LOG_LEVEL: "debug"
+  NODE_ENV: "development"

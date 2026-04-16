@@ -9,12 +9,18 @@ const PORT = process.env.PORT || 3001;
 // All logs should include: timestamp, level, message, and relevant context
 
 // Redis connection
-const redis = new Redis({
+const redisOptions = {
   host: process.env.REDIS_HOST || 'localhost',
   port: parseInt(process.env.REDIS_PORT || '6379'),
   maxRetriesPerRequest: 3,
   lazyConnect: true
-});
+};
+
+if (process.env.REDIS_PASSWORD) {
+  redisOptions.password = process.env.REDIS_PASSWORD;
+}
+
+const redis = new Redis(redisOptions);
 
 redis.on('connect', () => console.log('Connected to Redis'));
 redis.on('error', (err) => console.error('Redis error:', err.message));

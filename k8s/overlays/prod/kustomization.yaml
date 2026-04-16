@@ -1,0 +1,20 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+patches:
+  - path: patches/configmap.yaml
+  - path: patches/api-gateway.yaml
+  - path: patches/user-service.yaml
+  - path: patches/redis.yaml
+  - path: patches/external-secret-prod-key.yaml
+
+images:
+  - name: devops-challenge/api-gateway
+    newName: ghcr.io/YOUR_ORG/devops-challenge/api-gateway
+    newTag: latest
+  - name: devops-challenge/user-service
+    newName: ghcr.io/YOUR_ORG/devops-challenge/user-service
+    newTag: latest
