@@ -55,7 +55,7 @@ jobs:
           else
             echo "No tests found, skipping"
           fi
-
+#Tag Assignament
       - name: Push images
         run: |
           docker push ghcr.io/${{ github.actor }}/api-gateway:latest
@@ -63,5 +63,6 @@ jobs:
 
           docker push ghcr.io/${{ github.actor }}/user-service:latest
           docker push ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG}
+
 
 
