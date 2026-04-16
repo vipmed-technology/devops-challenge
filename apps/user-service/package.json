@@ -4,6 +4,7 @@
   "description": "User Service for DevOps Challenge",
   "main": "src/index.js",
   "scripts": {
+    "test": "node --test src/index.test.js",
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "test": "node --test src/**/*.test.js",
