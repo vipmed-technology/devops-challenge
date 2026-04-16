@@ -24,16 +24,17 @@ jobs:
         run: echo "${{ secrets.GHCR_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
       - name: Build API Gateway
-        run: docker build \
-              -t ghcr.io/${{ github.actor }}/api-gateway:latest \
-              -t ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG} \
-              ./apps/api-gateway
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.actor }}/api-gateway:latest \
+            -t ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG} \
+            ./apps/api-gateway
 
-      - name: Build User Service
-        run: docker build \
-             -t ghcr.io/${{ github.actor }}/user-service:latest \
-             -t ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG} \
-             ./apps/user-service
+        run: |
+          docker build \
+            -t ghcr.io/${{ github.actor }}/user-service:latest \
+            -t ghcr.io/${{ github.actor }}/user-service:${IMAGE_TAG} \
+            ./apps/user-service
 
       - name: Run tests (api-gateway)
         run: |
