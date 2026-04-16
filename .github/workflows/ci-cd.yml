@@ -29,7 +29,7 @@ jobs:
             -t ghcr.io/${{ github.actor }}/api-gateway:latest \
             -t ghcr.io/${{ github.actor }}/api-gateway:${IMAGE_TAG} \
             ./apps/api-gateway
-
+      - name: Build User Service
         run: |
           docker build \
             -t ghcr.io/${{ github.actor }}/user-service:latest \
