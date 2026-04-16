@@ -1,0 +1,41 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+  # Includes the Horizontal Pod Autoscalers specifically for the production environment
+  - hpa.yaml
+
+namePrefix: prod-
+
+# JSON Patches: Directly modifies the base manifests without changing the original files
+patches:
+  - target:
+      kind: Deployment
+      name: api-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2 # Overrides the implicit default (1) to ensure starting HA state
+  - target:
+      kind: Deployment
+      name: user-service
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+configMapGenerator:
+  - name: app-config
+    behavior: merge
+    literals:
+      - LOG_LEVEL=info
+      # Using standard names since prod DNS matches standard prefixes or relies on namespace segregation
+      - REDIS_HOST=prod-redis
+      - USER_SERVICE_URL=http://prod-user-service:3001
+
+secretGenerator:
+  - name: app-secrets
+    behavior: merge
+    literals:
+      - redis-password=super-secure-prod-password-123!
